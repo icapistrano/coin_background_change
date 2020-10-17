@@ -122,7 +122,7 @@ class Ui_coinSegmentation(object):
         if file == False:
             folder_path = QtWidgets.QFileDialog.getExistingDirectory(None, "Select Folder", None, QtWidgets.QFileDialog.ShowDirsOnly)
             if condition == self.image_button_folder:
-                self.images = [folder_path + "/" + image for image in os.listdir(folder_path) if image.endswith(".jpg")]
+                self.images = [folder_path + "/" + image for image in os.listdir(folder_path) if image.endswith(".jpg") or image.endswith(".JPG")]
 
             elif condition == self.black_bg_folder:
                 self.black_bg_folder_path = folder_path
@@ -192,28 +192,21 @@ class Ui_coinSegmentation(object):
                     name, ext = name.split(".")
 
                     img = cv2.imread(img)
-                    rows, cols, ch = img.shape
-                    img_center = (int(cols/2), int(rows/2))
                     
                     grey_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                     blur = cv2.GaussianBlur(grey_img, (5, 5), 0)
-                    edges = cv2.Canny(blur,100,200)
+
+                    sigma = 0.33
+                    v = np.median(blur)
+
+                    lower = int(max(0, (1.0-sigma) * v))
+                    upper = int(max(255, (1.0+sigma) * v))
+
+                    edges = cv2.Canny(blur, lower, upper)
 
                     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-                    valid_points = []
-                    for contour in contours:
-                        x,y,w,h = cv2.boundingRect(contour)
-
-                        box_center = (x+(w/2), y+(w/2))
-                        distance = calculate_distance(box_center, img_center)
-
-                        if distance < 300:
-                            valid_points.append(contour)
-                        else:
-                            cv2.rectangle(edges,(x,y),(x+w,y+h),(0,0,0),-1)
-
-                    contour = np.concatenate(valid_points)
+                    contour = np.concatenate(contours)
 
                     x,y,w,h = cv2.boundingRect(contour)
                     rect = (x, y, w, h)
@@ -255,9 +248,13 @@ class Ui_coinSegmentation(object):
                         else:
                             width = px_to_mm(25) # default mm size
                         
-                        rows, cols, ch= dst.shape
+                        rows, cols, ch = dst.shape # height, width
                         aspect_ratio = cols / rows
-                        height = width * aspect_ratio
+
+                        if rows > cols:
+                            height = width * aspect_ratio
+                        else:
+                            height = width / aspect_ratio
 
                         dst = cv2.resize(dst, (int(width), int(height)))
                         RGBimage = cv2.cvtColor(dst, cv2.COLOR_BGRA2RGBA)
@@ -266,7 +263,7 @@ class Ui_coinSegmentation(object):
 
                 except Exception as e:
                     with open("error_logs.txt", "w") as log:
-                        log.write(f"{e}")
+                        log.write(f"{name}.{ext}: {e}")
 
 if __name__ == "__main__":
     try:
